@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+venv/
+env/
+
+# Node
+node_modules/
+.next/
+*.tsbuildinfo
+
+# Environment Variables
+.env
+.env.local
+
+# Databases
+*.db
+*.sqlite3
+
+# Project Specific
+backend/sandbox_*/
+.agents/
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store

@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0b0f19;
+  --foreground: #e2e8f0;
+  --card: #151c2c;
+  --card-border: #222d44;
+  --primary: #06b6d4;      /* Neon Cyan */
+  --primary-glow: rgba(6, 182, 212, 0.15);
+  --success: #10b981;      /* Emerald Green */
+  --success-glow: rgba(16, 185, 129, 0.15);
+  --warning: #f59e0b;      /* Amber Gold */
+  --error: #ef4444;        /* Rose Red */
+  --accent: #8b5cf6;       /* Violet */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-border: var(--card-border);
+  --color-primary: var(--primary);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-accent: var(--accent);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0d1222;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Glassmorphism Styles */
+.glass-card {
+  background: rgba(21, 28, 44, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(34, 45, 68, 0.8);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  border-color: rgba(6, 182, 212, 0.4);
+  box-shadow: 0 8px 32px 0 rgba(6, 182, 212, 0.08);
+}
+
+.glass-input {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(34, 45, 68, 0.8);
+  color: #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.glass-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 10px var(--primary-glow);
+}
+
+/* Pulsing neon dots for workflow */
+@keyframes pulse-glow {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 4px var(--primary);
+  }
+  50% {
+    transform: scale(1.15);
+    box-shadow: 0 0 12px var(--primary);
+  }
+}
+
+.pulse-primary {
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+/* Grid overlay background */
+.tech-grid {
+  background-image: 
+    linear-gradient(rgba(15, 23, 42, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.15) 1px, transparent 1px);
+  background-size: 30px 30px;
+  background-position: center;
+}
+
+/* Glowing text */
+.glow-text-cyan {
+  text-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+}
+
+.glow-text-emerald {
+  text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
