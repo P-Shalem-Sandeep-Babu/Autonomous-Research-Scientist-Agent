@@ -111,6 +111,7 @@ class DebateLog(Base):
     hypothesis_id = Column(Integer, ForeignKey("hypotheses.id"))
     proposal_a = Column(Text, nullable=False)
     proposal_b = Column(Text, nullable=False)
+    proposal_c = Column(Text, nullable=True)
     debate_rounds = Column(JSON, nullable=True)  # List of messages from different debaters
     winner_proposal = Column(Text, nullable=True)
     rationale = Column(Text, nullable=True)

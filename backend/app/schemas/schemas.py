@@ -112,6 +112,7 @@ class DebateLogResponse(BaseModel):
     hypothesis_id: int
     proposal_a: str
     proposal_b: str
+    proposal_c: Optional[str] = None
     debate_rounds: Optional[List[Dict[str, Any]]] = None
     winner_proposal: Optional[str] = None
     rationale: Optional[str] = None
@@ -140,7 +141,7 @@ class ExperimentPlanResponse(BaseModel):
     id: int
     project_id: int
     roadmap: Optional[List[Dict[str, Any]]] = None
-    metrics: Optional[List[str]] = None
+    metrics: Optional[List[Any]] = None
     hardware_requirements: Optional[Dict[str, Any]] = None
     created_at: datetime
 

@@ -36,6 +36,34 @@ def repair_database():
     except Exception as e:
         print(f"Error repairing research_stages: {e}")
 
+    # 2. Deduplicate dataset_recommendations
+    try:
+        cursor.execute("""
+            DELETE FROM dataset_recommendations
+            WHERE id NOT IN (
+                SELECT MAX(id)
+                FROM dataset_recommendations
+                GROUP BY project_id, name
+            )
+        """)
+        print("Cleaned duplicate dataset recommendations.")
+    except Exception as e:
+        print(f"Error deduplicating datasets: {e}")
+
+    # 3. Deduplicate experiment_plans (keep latest per project)
+    try:
+        cursor.execute("""
+            DELETE FROM experiment_plans
+            WHERE id NOT IN (
+                SELECT MAX(id)
+                FROM experiment_plans
+                GROUP BY project_id
+            )
+        """)
+        print("Cleaned duplicate experiment plans.")
+    except Exception as e:
+        print(f"Error deduplicating plans: {e}")
+
     conn.commit()
     conn.close()
     print("Database check and repair complete.")

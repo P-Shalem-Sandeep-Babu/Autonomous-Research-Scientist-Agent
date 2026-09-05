@@ -2,6 +2,8 @@ import math
 from typing import List, Dict, Any, Optional
 from app.utils.llm import get_llm_client
 
+_GEMINI_EMBEDDING_FAILED = False
+
 class SimpleVectorStore:
     def __init__(self, collection_name: str):
         self.collection_name = collection_name
@@ -12,19 +14,21 @@ class SimpleVectorStore:
 
     async def get_embedding(self, text: str) -> List[float]:
         """Fetch embedding from Gemini if API is configured, otherwise fallback to simple hashing/char vectors."""
-        client = get_llm_client()
-        if client:
-            try:
-                # Use Gemini Embeddings API
-                model = "models/text-embedding-004"
-                result = client.embed_content(
-                    model=model,
-                    content=text,
-                    task_type="retrieval_document"
-                )
-                return result['embedding']
-            except Exception as e:
-                print(f"Error getting Gemini embedding: {e}")
+        global _GEMINI_EMBEDDING_FAILED
+        if not _GEMINI_EMBEDDING_FAILED:
+            client = get_llm_client()
+            if client:
+                for model_candidate in ["models/embedding-001", "models/text-embedding-004"]:
+                    try:
+                        result = client.embed_content(
+                            model=model_candidate,
+                            content=text,
+                            task_type="retrieval_document"
+                        )
+                        return result['embedding']
+                    except Exception:
+                        pass
+                _GEMINI_EMBEDDING_FAILED = True
         
         # Fallback keyword representation (char-based hash vector of size 128)
         vector = [0.0] * 128

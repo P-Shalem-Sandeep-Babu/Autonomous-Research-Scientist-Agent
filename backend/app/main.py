@@ -178,17 +178,53 @@ def get_project_details(project_id: int, db: Session = Depends(get_db), current_
     papers = db.query(LiteraturePaper).filter(LiteraturePaper.project_id == project_id).all()
     gaps = db.query(ResearchGap).filter(ResearchGap.project_id == project_id).all()
     hypotheses = db.query(Hypothesis).filter(Hypothesis.project_id == project_id).all()
-    debate_logs = db.query(DebateLog).filter(DebateLog.project_id == project_id).all()
+    debate_logs = db.query(DebateLog).filter(DebateLog.project_id == project_id).order_by(DebateLog.id.desc()).all()
     datasets = db.query(DatasetRecommendation).filter(DatasetRecommendation.project_id == project_id).all()
     plans = db.query(ExperimentPlan).filter(ExperimentPlan.project_id == project_id).all()
     files = db.query(GeneratedFile).filter(GeneratedFile.project_id == project_id).all()
     runs = db.query(ExperimentRun).filter(ExperimentRun.project_id == project_id).all()
     paper = db.query(ScientificPaper).filter(ScientificPaper.project_id == project_id).first()
     reach = db.query(AgentReachEvidence).filter(AgentReachEvidence.project_id == project_id).all()
+    memories = db.query(ResearchMemory).filter(ResearchMemory.project_id == project_id).all()
     
     review = None
     if paper:
         review = db.query(PeerReview).filter(PeerReview.paper_id == paper.id).first()
+
+    # Formulate robust debate object
+    debate_stage = next((s for s in stages if s.stage_name == "debate"), None)
+    debate_output = debate_stage.output_data if debate_stage and isinstance(debate_stage.output_data, dict) else {}
+    debate_obj = None
+    if debate_logs:
+        latest = debate_logs[0]
+        prop_c = getattr(latest, "proposal_c", None) or debate_output.get("proposal_c")
+        debate_obj = {
+            "id": latest.id,
+            "project_id": latest.project_id,
+            "hypothesis_id": latest.hypothesis_id,
+            "proposal_a": latest.proposal_a,
+            "proposal_b": latest.proposal_b,
+            "proposal_c": prop_c or debate_output.get("proposal_c", "Proposed Novel Synthesis"),
+            "debate_rounds": latest.debate_rounds or debate_output.get("debate_rounds", []),
+            "winner_proposal": latest.winner_proposal or debate_output.get("winner_proposal"),
+            "rationale": latest.rationale or debate_output.get("rationale"),
+            "proposals_detailed": debate_output.get("proposals_detailed", {}),
+            "created_at": latest.created_at
+        }
+    elif debate_output and "proposal_a" in debate_output:
+        debate_obj = {
+            "id": 0,
+            "project_id": project_id,
+            "hypothesis_id": 0,
+            "proposal_a": debate_output.get("proposal_a", ""),
+            "proposal_b": debate_output.get("proposal_b", ""),
+            "proposal_c": debate_output.get("proposal_c", ""),
+            "debate_rounds": debate_output.get("debate_rounds", []),
+            "winner_proposal": debate_output.get("winner_proposal", ""),
+            "rationale": debate_output.get("rationale", ""),
+            "proposals_detailed": debate_output.get("proposals_detailed", {}),
+            "created_at": None
+        }
         
     return {
         "project": {
@@ -204,14 +240,24 @@ def get_project_details(project_id: int, db: Session = Depends(get_db), current_
         "literature": papers,
         "gaps": gaps,
         "hypotheses": hypotheses,
-        "debate": debate_logs[0] if debate_logs else None,
+        "debate": debate_obj,
         "datasets": datasets,
         "plan": plans[0] if plans else None,
         "code_files": [{"filepath": f.filepath, "explanation": f.explanation, "id": f.id} for f in files],
         "experiment_runs": runs,
         "scientific_paper": paper,
         "peer_review": review,
-        "reach_evidence": reach
+        "reach_evidence": reach,
+        "memories": [
+            {
+                "id": m.id,
+                "memory_type": m.memory_type,
+                "key": m.key,
+                "value": m.value,
+                "created_at": m.created_at
+            }
+            for m in memories
+        ]
     }
 
 @app.delete(f"{settings.API_V1_STR}/projects/{{project_id}}")
@@ -566,6 +612,7 @@ async def delete_uploaded_paper(
 
 def build_pdf_reportlab(project_id: int, title: str, abstract: str, sections: dict):
     import os
+    import html
     from reportlab.lib.pagesizes import letter
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet
@@ -580,21 +627,23 @@ def build_pdf_reportlab(project_id: int, title: str, abstract: str, sections: di
         story = []
         
         # Title
-        story.append(Paragraph(f"<b>{title}</b>", styles["Title"]))
+        story.append(Paragraph(f"<b>{html.escape(title or 'Academic Paper')}</b>", styles["Title"]))
         story.append(Spacer(1, 12))
         
         # Abstract
         story.append(Paragraph("<b>Abstract</b>", styles["Heading2"]))
         story.append(Spacer(1, 6))
-        story.append(Paragraph(abstract or "No abstract available.", styles["Normal"]))
+        safe_abs = html.escape(abstract or "No abstract available.").replace("\n", "<br/>")
+        story.append(Paragraph(safe_abs, styles["Normal"]))
         story.append(Spacer(1, 12))
         
         # Sections
         if sections:
             for sec_title, sec_content in sections.items():
-                story.append(Paragraph(f"<b>{sec_title}</b>", styles["Heading3"]))
+                story.append(Paragraph(f"<b>{html.escape(sec_title)}</b>", styles["Heading3"]))
                 story.append(Spacer(1, 6))
-                story.append(Paragraph(sec_content.replace("\n", "<br/>"), styles["Normal"]))
+                safe_sec = html.escape(sec_content or "").replace("\n", "<br/>")
+                story.append(Paragraph(safe_sec, styles["Normal"]))
                 story.append(Spacer(1, 12))
                 
         doc.build(story)
