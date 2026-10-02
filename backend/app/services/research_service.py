@@ -1,5 +1,13 @@
-import arxiv
-from Bio import Entrez
+try:
+    import arxiv
+except ImportError:
+    arxiv = None
+
+try:
+    from Bio import Entrez
+except ImportError:
+    Entrez = None
+
 from typing import List, Dict, Optional
 import httpx
 from app.core.config import settings
@@ -10,11 +18,14 @@ class ResearchService:
     """Service for fetching and processing research papers from arXiv and PubMed."""
 
     def __init__(self):
-        self.arxiv_client = arxiv.Client()
-        Entrez.email = settings.PUBMED_EMAIL  # Required for PubMed API
+        self.arxiv_client = arxiv.Client() if arxiv else None
+        if Entrez:
+            Entrez.email = settings.PUBMED_EMAIL  # Required for PubMed API
 
     async def fetch_arxiv_papers(self, query: str, max_results: int = 5) -> List[Dict]:
         """Fetch papers from arXiv based on a search query."""
+        if not self.arxiv_client:
+            return []
         cache_key = f"arxiv_papers:{query}:{max_results}"
         cached_result = await cache.get(cache_key)
         if cached_result:
@@ -42,6 +53,8 @@ class ResearchService:
 
     async def fetch_pubmed_papers(self, query: str, max_results: int = 5) -> List[Dict]:
         """Fetch papers from PubMed based on a search query."""
+        if not Entrez:
+            return []
         cache_key = f"pubmed_papers:{query}:{max_results}"
         cached_result = await cache.get(cache_key)
         if cached_result:

@@ -4,18 +4,19 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getToken } from "@/lib/api";
+import { api } from "@/lib/api";
 
 export default function IndexPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const token = getToken();
-    if (token) {
-      router.push("/dashboard");
-    } else {
-      router.push("/login");
-    }
+    api.getMe()
+      .then(() => {
+        router.push("/dashboard");
+      })
+      .catch(() => {
+        router.push("/login");
+      });
   }, [router]);
 
   return (

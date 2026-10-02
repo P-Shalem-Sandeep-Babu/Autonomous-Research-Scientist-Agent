@@ -4,52 +4,90 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { api, getToken } from "@/lib/api";
-import { Lock, Mail, User, Shield, FlaskConical, AlertCircle } from "lucide-react";
+import { api } from "@/lib/api";
+import { Lock, Mail, User, Shield, FlaskConical, AlertCircle, KeyRound, CheckCircle2, ArrowLeft, Smartphone } from "lucide-react";
+
+type AuthMode = "login" | "register" | "mfa" | "forgot_password" | "reset_password";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [isLogin, setIsLogin] = useState(true);
+  const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState("researcher");
+  const [mfaCode, setMfaCode] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // If already logged in, redirect to dashboard
-    if (getToken()) {
-      router.push("/dashboard");
-    }
+    // If user already holds a valid HttpOnly session cookie, redirect straight to dashboard
+    api.getMe()
+      .then(() => {
+        router.push("/dashboard");
+      })
+      .catch(() => {
+        // Not authenticated, stay on login page
+      });
   }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setSuccess("");
     setLoading(true);
 
     try {
-      if (isLogin) {
-        // Build URL-encoded form data for OAuth2
+      if (mode === "login") {
         const formData = new FormData();
         formData.append("username", email);
         formData.append("password", password);
-        await api.login(formData);
+        const res = await api.login(formData);
+
+        if (res.mfa_required) {
+          setMode("mfa");
+          setSuccess("Two-factor authentication required. Enter your 6-digit code.");
+        } else {
+          router.push("/dashboard");
+        }
+      } else if (mode === "mfa") {
+        const formData = new FormData();
+        formData.append("username", email);
+        formData.append("password", password);
+        await api.login(formData, mfaCode);
         router.push("/dashboard");
-      } else {
+      } else if (mode === "register") {
         await api.register({
           email,
           password,
           full_name: fullName,
           role,
         });
-        setIsLogin(true);
+        setMode("login");
         setPassword("");
-        setError("Account created successfully! Please log in.");
+        setSuccess("Account successfully created. You can now log in.");
+      } else if (mode === "forgot_password") {
+        const res = await api.forgotPassword(email);
+        setSuccess(res.message);
+        if (res.reset_token) {
+          setResetToken(res.reset_token);
+        }
+        setMode("reset_password");
+      } else if (mode === "reset_password") {
+        const res = await api.resetPassword(resetToken, newPassword);
+        setSuccess(res.message);
+        setMode("login");
+        setPassword("");
+        setNewPassword("");
+        setResetToken("");
       }
-    } catch (err: any) {
-      setError(err.message || "Authentication failed. Check your inputs.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Authentication request failed.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -72,9 +110,13 @@ export default function LoginPage() {
         </div>
 
         {/* Auth Box */}
-        <div className="glass-card rounded-2xl p-8 border border-card-border">
+        <div className="glass-card rounded-2xl p-8 border border-card-border shadow-2xl">
           <h2 className="text-xl font-bold mb-6 text-center text-slate-200">
-            {isLogin ? "Access Research Environment" : "Establish Researcher Profile"}
+            {mode === "login" && "Access Research Environment"}
+            {mode === "register" && "Establish Researcher Profile"}
+            {mode === "mfa" && "Two-Factor Verification"}
+            {mode === "forgot_password" && "Recover Account Password"}
+            {mode === "reset_password" && "Set New Password"}
           </h2>
 
           {error && (
@@ -84,8 +126,15 @@ export default function LoginPage() {
             </div>
           )}
 
+          {success && (
+            <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm p-3 rounded-lg mb-6">
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+              <span>{success}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
-            {!isLogin && (
+            {mode === "register" && (
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Full Name</label>
                 <div className="relative">
@@ -102,37 +151,56 @@ export default function LoginPage() {
               </div>
             )}
 
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Email Address</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="researcher@institute.edu"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg glass-input text-sm"
-                />
+            {(mode === "login" || mode === "register" || mode === "forgot_password") && (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="researcher@institute.edu"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-lg glass-input text-sm"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg glass-input text-sm"
-                />
+            {(mode === "login" || mode === "register") && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Password</label>
+                  {mode === "login" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("forgot_password");
+                        setError("");
+                        setSuccess("");
+                      }}
+                      className="text-xs text-primary/80 hover:text-primary transition"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-lg glass-input text-sm"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
-            {!isLogin && (
+            {mode === "register" && (
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Platform Role</label>
                 <div className="relative">
@@ -149,28 +217,132 @@ export default function LoginPage() {
               </div>
             )}
 
+            {mode === "mfa" && (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Authenticator 6-Digit Code</label>
+                <div className="relative">
+                  <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+                    placeholder="123456"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-lg glass-input text-sm tracking-widest text-center text-lg font-mono"
+                  />
+                </div>
+                <p className="text-xs text-slate-400">Open Google Authenticator, 1Password, or Authy to retrieve your temporary code.</p>
+              </div>
+            )}
+
+            {mode === "reset_password" && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Reset Token</label>
+                  <div className="relative">
+                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input
+                      type="text"
+                      required
+                      value={resetToken}
+                      onChange={(e) => setResetToken(e.target.value)}
+                      placeholder="Paste reset token here"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-lg glass-input text-sm font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">New Password (min 8 chars)</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input
+                      type="password"
+                      required
+                      minLength={8}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-lg glass-input text-sm"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
             <button
               type="submit"
               disabled={loading}
               className="w-full py-2.5 rounded-lg bg-primary hover:bg-primary/95 text-background font-semibold text-sm transition-all duration-200 shadow-lg shadow-primary/20 disabled:opacity-50 mt-2"
             >
-              {loading ? "Authenticating..." : isLogin ? "Initiate Session" : "Create Account"}
+              {loading ? (
+                "Processing..."
+              ) : mode === "login" ? (
+                "Initiate Session"
+              ) : mode === "register" ? (
+                "Create Account"
+              ) : mode === "mfa" ? (
+                "Verify Code & Enter"
+              ) : mode === "forgot_password" ? (
+                "Request Reset Instructions"
+              ) : (
+                "Update Password"
+              )}
             </button>
           </form>
 
-          {/* Toggle link */}
-          <p className="text-center text-xs text-slate-500 mt-6">
-            {isLogin ? "New to the platform?" : "Already registered?"}{" "}
-            <button
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setError("");
-              }}
-              className="text-primary hover:underline font-medium"
-            >
-              {isLogin ? "Create credentials" : "Log in to existing"}
-            </button>
-          </p>
+          {/* Mode Switchers */}
+          <div className="mt-6 pt-4 border-t border-slate-800 text-center">
+            {mode === "login" && (
+              <p className="text-xs text-slate-500">
+                New to the platform?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("register");
+                    setError("");
+                    setSuccess("");
+                  }}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Create credentials
+                </button>
+              </p>
+            )}
+
+            {mode === "register" && (
+              <p className="text-xs text-slate-500">
+                Already registered?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("login");
+                    setError("");
+                    setSuccess("");
+                  }}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Log in to existing
+                </button>
+              </p>
+            )}
+
+            {(mode === "forgot_password" || mode === "reset_password" || mode === "mfa") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("login");
+                  setError("");
+                  setSuccess("");
+                }}
+                className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Return to Login
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </main>

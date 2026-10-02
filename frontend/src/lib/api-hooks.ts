@@ -16,7 +16,7 @@ export const useLogin = () => {
 
 export const useRegister = () => {
   return useMutation({
-    mutationFn: (userData: any) => api.register(userData),
+    mutationFn: (userData: { email: string; password: string; full_name: string; role?: string }) => api.register(userData),
   });
 };
 
@@ -39,7 +39,7 @@ export const useGetProjects = () => {
 export const useCreateProject = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (projectData: any) => api.createProject(projectData),
+    mutationFn: (projectData: { title: string; description?: string }) => api.createProject(projectData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
     },

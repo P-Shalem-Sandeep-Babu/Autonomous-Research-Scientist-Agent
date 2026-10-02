@@ -1,7 +1,7 @@
 "use client";
 
 import { Line } from "react-chartjs-2";
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from "chart.js";
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, type ChartData } from "chart.js";
 
 // Register ChartJS components
 ChartJS.register(
@@ -18,7 +18,7 @@ export default function ResearchChart({
   data,
   title = "Research Metrics",
 }: {
-  data: any;
+  data: ChartData<"line">;
   title?: string;
 }) {
   const options = {

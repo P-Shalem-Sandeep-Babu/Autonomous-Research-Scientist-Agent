@@ -6,6 +6,9 @@ from app.models.models import ResearchStage, Project
 
 logger = logging.getLogger("arsa.agents")
 
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
 class BaseAgent:
     def __init__(self, db: Session, project_id: int, stage_name: str):
         self.db = db
@@ -36,7 +39,7 @@ class BaseAgent:
     def start_stage(self):
         stage = self._get_or_create_stage()
         stage.status = "active"
-        stage.started_at = datetime.utcnow()
+        stage.started_at = utc_now()
         stage.output_data = {"logs": []}
         stage.reasoning_chain = []
         self.db.commit()
@@ -44,11 +47,14 @@ class BaseAgent:
         self.log(f"Starting {self.stage_name.replace('_', ' ').title()} Stage...")
 
     def reason_step(self, message: str, step_type: str = "thought"):
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = utc_now().isoformat()
         step_entry = {"timestamp": timestamp, "type": step_type, "message": message, "stage": self.stage_name}
-        print(f"[{self.stage_name.upper()} - REASONING ({step_type.upper()})] {message}")
+        logger.info(
+            f"[{self.stage_name.upper()} - REASONING ({step_type.upper()})] {message}",
+            extra={"stage": self.stage_name, "step_type": step_type, "project_id": self.project_id}
+        )
         if self.stage_record:
-            stage = self.db.query(ResearchStage).get(self.stage_record.id)
+            stage = self.db.get(ResearchStage, self.stage_record.id)
             if stage:
                 chain = list(stage.reasoning_chain or [])
                 chain.append(step_entry)
@@ -58,23 +64,20 @@ class BaseAgent:
                 if hasattr(self, 'on_reasoning_callback') and self.on_reasoning_callback:
                     self.on_reasoning_callback(step_entry)
 
-
     def log(self, message: str, level: str = "INFO"):
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = utc_now().isoformat()
         log_entry = {"timestamp": timestamp, "level": level, "message": message}
         self.logs_list.append(log_entry)
         
-        # Print locally
-        try:
-            print(f"[{self.stage_name.upper()} - {level}] {message}")
-        except UnicodeEncodeError:
-            safe_message = message.encode('ascii', errors='replace').decode('ascii')
-            print(f"[{self.stage_name.upper()} - {level}] {safe_message}")
+        log_func = getattr(logger, level.lower(), logger.info)
+        log_func(
+            f"[{self.stage_name.upper()} - {level}] {message}",
+            extra={"stage": self.stage_name, "project_id": self.project_id}
+        )
         
         # Save logs dynamically in the active stage's JSON output
         if self.stage_record:
-            # We fetch a fresh DB session query to avoid cache/threading conflicts
-            stage = self.db.query(ResearchStage).get(self.stage_record.id)
+            stage = self.db.get(ResearchStage, self.stage_record.id)
             if stage:
                 output = dict(stage.output_data or {})
                 logs = list(output.get("logs", []))
@@ -88,25 +91,25 @@ class BaseAgent:
                     
     def complete_stage(self, output_payload: dict):
         if self.stage_record:
-            stage = self.db.query(ResearchStage).get(self.stage_record.id)
+            stage = self.db.get(ResearchStage, self.stage_record.id)
             if stage:
                 output = dict(stage.output_data or {})
                 output.update(output_payload)
                 stage.output_data = output
                 stage.status = "completed"
-                stage.completed_at = datetime.utcnow()
+                stage.completed_at = utc_now()
                 self.db.commit()
                 self.log(f"Completed {self.stage_name.replace('_', ' ').title()} Stage successfully.")
 
     def fail_stage(self, error_message: str):
         if self.stage_record:
-            stage = self.db.query(ResearchStage).get(self.stage_record.id)
+            stage = self.db.get(ResearchStage, self.stage_record.id)
             if stage:
                 output = dict(stage.output_data or {})
                 output["error"] = error_message
                 stage.output_data = output
                 stage.status = "failed"
-                stage.completed_at = datetime.utcnow()
+                stage.completed_at = utc_now()
                 self.db.commit()
                 self.log(f"Stage failed: {error_message}", "ERROR")
 

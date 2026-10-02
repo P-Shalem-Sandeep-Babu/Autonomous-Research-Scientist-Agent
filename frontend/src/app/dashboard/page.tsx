@@ -4,17 +4,19 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { api, getToken, clearToken } from "@/lib/api";
+import { api } from "@/lib/api";
+import { User, Project, DashboardAnalytics } from "@/types";
 import { 
   FlaskConical, LogOut, Plus, Search, Calendar, Folder, User as UserIcon, 
-  Trash2, Brain, ChevronRight, BookOpen, GitMerge, FileText, Cpu, Play
+  Trash2, Brain, ChevronRight, BookOpen, GitMerge, FileText, Cpu, Play,
+  ShieldAlert, ShieldCheck, Smartphone, KeyRound, X, CheckCircle2, AlertCircle
 } from "lucide-react";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [analytics, setAnalytics] = useState<any>({
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [analytics, setAnalytics] = useState<DashboardAnalytics>({
     papers_analyzed: 0,
     gaps_found: 0,
     hypotheses_generated: 0,
@@ -28,6 +30,72 @@ export default function DashboardPage() {
   const [newDesc, setNewDesc] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // MFA Management Modal State
+  const [isMfaModalOpen, setIsMfaModalOpen] = useState(false);
+  const [mfaSecret, setMfaSecret] = useState("");
+  const [mfaOtpauthUrl, setMfaOtpauthUrl] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaPassword, setMfaPassword] = useState("");
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaError, setMfaError] = useState("");
+  const [mfaSuccess, setMfaSuccess] = useState("");
+
+  const handleOpenMfaModal = async () => {
+    setMfaError("");
+    setMfaSuccess("");
+    setMfaCode("");
+    setMfaPassword("");
+    setIsMfaModalOpen(true);
+    if (!currentUser?.mfa_enabled) {
+      try {
+        setMfaLoading(true);
+        const setup = await api.setupMFA();
+        setMfaSecret(setup.secret);
+        setMfaOtpauthUrl(setup.otpauth_url);
+      } catch (err: unknown) {
+        setMfaError(err instanceof Error ? err.message : "Failed to initiate MFA setup");
+      } finally {
+        setMfaLoading(false);
+      }
+    }
+  };
+
+  const handleEnableMfa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaCode.trim()) return;
+    try {
+      setMfaLoading(true);
+      setMfaError("");
+      const res = await api.enableMFA(mfaCode.trim());
+      setMfaSuccess(res.message);
+      if (currentUser) {
+        setCurrentUser({ ...currentUser, mfa_enabled: true });
+      }
+    } catch (err: unknown) {
+      setMfaError(err instanceof Error ? err.message : "Failed to activate MFA");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleDisableMfa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaCode.trim() || !mfaPassword.trim()) return;
+    try {
+      setMfaLoading(true);
+      setMfaError("");
+      const res = await api.disableMFA(mfaCode.trim(), mfaPassword);
+      setMfaSuccess(res.message);
+      if (currentUser) {
+        setCurrentUser({ ...currentUser, mfa_enabled: false });
+      }
+    } catch (err: unknown) {
+      setMfaError(err instanceof Error ? err.message : "Failed to disable MFA");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
 
   // Quick Launch Presets
   const presets = [
@@ -47,11 +115,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetchUserData = async () => {
-      const token = getToken();
-      if (!token) {
-        router.push("/login");
-        return;
-      }
       try {
         const user = await api.getMe();
         setCurrentUser(user);
@@ -63,7 +126,7 @@ export default function DashboardPage() {
         setAnalytics(ana);
       } catch (err) {
         console.error("Dashboard init error", err);
-        clearToken();
+        await api.logout();
         router.push("/login");
       } finally {
         setLoading(false);
@@ -72,8 +135,8 @@ export default function DashboardPage() {
     fetchUserData();
   }, [router]);
 
-  const handleLogout = () => {
-    clearToken();
+  const handleLogout = async () => {
+    await api.logout();
     router.push("/login");
   };
 
@@ -155,7 +218,29 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleOpenMfaModal}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-200 ${
+              currentUser?.mfa_enabled
+                ? "border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400"
+                : "border-slate-700 bg-slate-800/40 hover:bg-slate-800 text-slate-300"
+            }`}
+            title="Configure Multi-Factor Authentication (2FA)"
+          >
+            <ShieldCheck className="w-4 h-4 text-primary" />
+            <span className="hidden sm:inline">{currentUser?.mfa_enabled ? "2FA Active" : "Enable 2FA"}</span>
+          </button>
+
+          {currentUser?.role === "administrator" && (
+            <button
+              onClick={() => router.push("/admin")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold transition-all duration-200"
+            >
+              <ShieldAlert className="w-4 h-4" />
+              <span>Admin Panel</span>
+            </button>
+          )}
           {currentUser && (
             <div className="text-right hidden sm:block">
               <p className="text-sm font-semibold text-slate-300">{currentUser.full_name}</p>
@@ -385,6 +470,136 @@ export default function DashboardPage() {
           )}
         </section>
       </main>
+
+      {/* Multi-Factor Authentication (MFA / 2FA) Modal */}
+      {isMfaModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="glass-card max-w-md w-full rounded-2xl p-6 border border-card-border shadow-2xl relative">
+            <div className="flex items-center justify-between pb-4 border-b border-card-border/60">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-primary" />
+                <h3 className="font-bold text-slate-200">Two-Factor Authentication (2FA)</h3>
+              </div>
+              <button
+                onClick={() => setIsMfaModalOpen(false)}
+                className="text-slate-500 hover:text-slate-300 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {mfaError && (
+              <div className="flex items-center gap-2 bg-error/10 border border-error/30 text-error text-xs p-3 rounded-lg my-4">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{mfaError}</span>
+              </div>
+            )}
+
+            {mfaSuccess && (
+              <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs p-3 rounded-lg my-4">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                <span>{mfaSuccess}</span>
+              </div>
+            )}
+
+            {!currentUser?.mfa_enabled ? (
+              <form onSubmit={handleEnableMfa} className="space-y-4 mt-4">
+                <p className="text-xs text-slate-300">
+                  Protect your researcher account with Time-based One-Time Passwords (TOTP). Add this secret to Google Authenticator, 1Password, or Authy.
+                </p>
+
+                {mfaSecret && (
+                  <div className="bg-slate-900/80 border border-slate-700/80 rounded-xl p-3 text-center">
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Secret Key (Base32)</p>
+                    <p className="font-mono text-sm tracking-widest text-primary font-bold select-all break-all">{mfaSecret}</p>
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-400">Enter 6-Digit Verification Code</label>
+                  <div className="relative">
+                    <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input
+                      type="text"
+                      required
+                      maxLength={6}
+                      value={mfaCode}
+                      onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+                      placeholder="123456"
+                      className="w-full pl-10 pr-4 py-2 rounded-lg glass-input text-sm font-mono tracking-widest text-center"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsMfaModalOpen(false)}
+                    className="px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-xs font-medium text-slate-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={mfaLoading || mfaCode.length !== 6}
+                    className="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-background font-semibold text-xs shadow-md disabled:opacity-50"
+                  >
+                    {mfaLoading ? "Verifying..." : "Verify & Enable 2FA"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleDisableMfa} className="space-y-4 mt-4">
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
+                  Two-factor authentication is currently active on your account. To disable it, confirm your identity with your account password and a current 6-digit TOTP code.
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-400">Account Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={mfaPassword}
+                    onChange={(e) => setMfaPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-3 py-2 rounded-lg glass-input text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-400">Current 6-Digit TOTP Code</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+                    placeholder="123456"
+                    className="w-full px-3 py-2 rounded-lg glass-input text-sm font-mono tracking-widest text-center"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsMfaModalOpen(false)}
+                    className="px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-xs font-medium text-slate-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={mfaLoading || !mfaPassword || mfaCode.length !== 6}
+                    className="px-4 py-1.5 rounded-lg bg-error hover:bg-error/90 text-white font-semibold text-xs shadow-md disabled:opacity-50"
+                  >
+                    {mfaLoading ? "Disabling..." : "Disable 2FA"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

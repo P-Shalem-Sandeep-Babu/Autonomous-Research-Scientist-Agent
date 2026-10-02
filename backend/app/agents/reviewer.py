@@ -96,9 +96,10 @@ class PeerReviewerAgent(BaseAgent):
             if "comments" in review_data and not review_data.get("reviewer_1"):
                 comments_value = review_data["comments"]
 
+            score_val = round(float(review_data.get("score", 8.0)), 2)
             review_db = PeerReview(
                 paper_id=paper.id if paper else 1,
-                score=review_data.get("score", 8.0),
+                score=score_val,
                 comments=comments_value,
                 suggestions=review_data.get("suggestions", [])
             )
@@ -110,7 +111,7 @@ class PeerReviewerAgent(BaseAgent):
             
             output = {
                 "review_id": review_db.id,
-                "score": review_db.score,
+                "score": float(review_db.score),
                 "comments": review_db.comments,
                 "suggestions": review_db.suggestions
             }
